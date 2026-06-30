@@ -200,6 +200,9 @@ body {
 }
 
 /* Buttons */
+.main-container {
+  padding: 0 1rem;
+}
 .btn-group {
   display: flex;
   justify-content: space-between;
