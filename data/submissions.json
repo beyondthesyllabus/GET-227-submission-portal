@@ -1,0 +1,38 @@
+[
+  {
+    "id": "GET2227-ME0RSBC2",
+    "referenceCode": "GET2227-ME0RSBC2",
+    "groupName": "group 1",
+    "department": "Electrical/Electronic",
+    "level": "200",
+    "projectTitle": "knuckle joints ",
+    "members": [
+      "24/eg/ee/001",
+      "24/eg/ee/101",
+      "24/eg/ee/121",
+      "24/eg/ee/151",
+      "24/eg/ee/601"
+    ],
+    "fileName": "1782763556089-class_one.SLDPRT",
+    "originalFileName": "class one.SLDPRT",
+    "submittedAt": "2026-06-29T20:05:56.102Z"
+  },
+  {
+    "id": "GET2227-QNK0RT28",
+    "referenceCode": "GET2227-QNK0RT28",
+    "groupName": "Group 1",
+    "department": "Mechanical",
+    "level": "200",
+    "projectTitle": "Datasets",
+    "members": [
+      "22/EG/ME/001",
+      "22/EG/ME/101",
+      "22/EG/ME/111",
+      "22/EG/ME/031",
+      "22/EG/ME/501"
+    ],
+    "fileName": "1782772736100-SmartGrid-CyberPhysical-Attack-Dataset.zip",
+    "originalFileName": "SmartGrid-CyberPhysical-Attack-Dataset.zip",
+    "submittedAt": "2026-06-29T22:38:56.127Z"
+  }
+]
