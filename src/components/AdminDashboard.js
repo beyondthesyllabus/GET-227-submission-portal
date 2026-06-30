@@ -10,7 +10,8 @@ export default function AdminDashboard({ token, onLogout }) {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [filterDept, setFilterDept] = useState('')
-  const [selectedSubmission, setSelectedSubmission] = useState(null)
+  const [uploadFile, setUploadFile] = useState(null)
+  const [uploading, setUploading] = useState(false)
   const [downloading, setDownloading] = useState(null)
   const [activeTab, setActiveTab] = useState('submissions') // 'submissions' | 'students' | 'timeline'
 
@@ -55,7 +56,28 @@ export default function AdminDashboard({ token, onLogout }) {
     }
   }
 
-  const handleLogout = () => {
+  const handleUpload = async (e) => {
+    e.preventDefault()
+    if (!uploadFile) return
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', uploadFile)
+      const res = await fetch('/api/admin/upload', {
+        method: 'POST',
+        headers: { 'x-admin-password': token },
+        body: form,
+      })
+      if (!res.ok) throw new Error('Upload failed')
+      const data = await res.json()
+      alert('File uploaded successfully! URL: ' + data.url)
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setUploading(false)
+      setUploadFile(null)
+    }
+  }
     sessionStorage.removeItem('admin_token')
     onLogout()
   }
@@ -155,6 +177,14 @@ export default function AdminDashboard({ token, onLogout }) {
           <div className="admin-stat-label">Top Department</div>
         </div>
       </div>
+
+        {/* Upload Form */}
+        <form onSubmit={handleUpload} className="admin-upload-form" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+          <input type="file" accept=".zip,.tar,.rar" onChange={e => setUploadFile(e.target.files[0])} />
+          <button type="submit" className="btn btn-primary" disabled={uploading || !uploadFile} style={{ padding: '0.5rem 1rem' }}>
+            {uploading ? 'Uploading...' : 'Upload Folder'}
+          </button>
+        </form>
 
       {/* Tabs */}
       <div className="admin-tabs">
@@ -371,7 +401,7 @@ export default function AdminDashboard({ token, onLogout }) {
               </div>
             )
           )}
-        </>
+        
       )}
 
       {/* =================== DETAIL MODAL =================== */}
