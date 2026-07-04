@@ -6,11 +6,11 @@ export async function POST(request) {
   try {
     const formData = await request.formData()
 
-    const groupName    = formData.get('groupName')
-    const department   = formData.get('department')
-    const level        = formData.get('level')
+    const groupName = formData.get('groupName')
+    const department = formData.get('department')
+    const level = formData.get('level')
     const projectTitle = formData.get('projectTitle')
-    const file         = formData.get('projectFile')
+    const file = formData.get('projectFile')
 
     // Collect all 5 registration numbers
     const members = []
@@ -36,11 +36,11 @@ export async function POST(request) {
       }
 
       const existingRegs = new Set()
-      ;(existingRows || []).forEach(entry => {
-        ;(entry.members || []).forEach(reg => {
-          if (reg) existingRegs.add(reg.trim().toLowerCase())
+        ; (existingRows || []).forEach(entry => {
+          ; (entry.members || []).forEach(reg => {
+            if (reg) existingRegs.add(reg.trim().toLowerCase())
+          })
         })
-      })
 
       const duplicateRegs = members.filter(reg => {
         const trimmed = reg.trim().toLowerCase()
@@ -85,7 +85,7 @@ export async function POST(request) {
     }
 
     // Generate unique reference code
-    const referenceCode = `GET2227-${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+    const referenceCode = `GET227-${Math.random().toString(36).substring(2, 10).toUpperCase()}`
 
     // Insert into Supabase
     const { error: insertErr } = await supabase.from('submissions').insert({
