@@ -1,25 +1,28 @@
-import { NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
-import path from 'path';
-
-const DB_PATH = path.join(process.cwd(), 'data', 'submissions.json');
-
-async function readDB() {
-  try {
-    const content = await readFile(DB_PATH, 'utf-8');
-    return JSON.parse(content);
-  } catch {
-    return [];
-  }
-}
+import { NextResponse } from 'next/server'
+import { supabase } from '../../../../lib/supabase'
 
 export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const reg = searchParams.get('reg');
+  const { searchParams } = new URL(request.url)
+  const reg = searchParams.get('reg')
+
   if (!reg) {
-    return NextResponse.json({ error: 'Missing reg query param' }, { status: 400 });
+    return NextResponse.json({ error: 'Missing reg query param' }, { status: 400 })
   }
-  const db = await readDB();
-  const exists = db.some(entry => (entry.members || []).some(r => r && r.trim().toLowerCase() === reg.trim().toLowerCase()));
-  return NextResponse.json({ exists });
+
+  const { data, error } = await supabase
+    .from('submissions')
+    .select('members')
+
+  if (error) {
+    console.error('DB error:', error)
+    return NextResponse.json({ error: 'Database error' }, { status: 500 })
+  }
+
+  const exists = (data || []).some(entry =>
+    (entry.members || []).some(r =>
+      r && r.trim().toLowerCase() === reg.trim().toLowerCase()
+    )
+  )
+
+  return NextResponse.json({ exists })
 }

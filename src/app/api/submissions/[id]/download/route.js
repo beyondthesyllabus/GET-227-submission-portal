@@ -1,18 +1,5 @@
 import { NextResponse } from 'next/server'
-import { readFile } from 'fs/promises'
-import path from 'path'
-
-const UPLOADS_PATH = path.join(process.cwd(), 'uploads')
-const DB_PATH = path.join(process.cwd(), 'data', 'submissions.json')
-
-async function readDB() {
-  try {
-    const content = await readFile(DB_PATH, 'utf-8')
-    return JSON.parse(content)
-  } catch {
-    return []
-  }
-}
+import { supabase, BUCKET } from '../../../../../lib/supabase'
 
 export async function GET(request, { params }) {
   const authHeader = request.headers.get('x-admin-password')
@@ -21,19 +8,31 @@ export async function GET(request, { params }) {
   }
 
   const { id } = params
-  const db = await readDB()
-  const submission = db.find(s => s.referenceCode === id)
 
-  if (!submission || !submission.fileName) {
+  const { data: row, error: dbErr } = await supabase
+    .from('submissions')
+    .select('file_name, original_file_name')
+    .eq('reference_code', id)
+    .single()
+
+  if (dbErr || !row || !row.file_name) {
     return NextResponse.json({ error: 'File not found' }, { status: 404 })
   }
 
-  const filePath = path.join(UPLOADS_PATH, submission.fileName)
-  const fileBuffer = await readFile(filePath)
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .download(row.file_name)
 
-  return new NextResponse(fileBuffer, {
+  if (error || !data) {
+    console.error('Download error:', error)
+    return NextResponse.json({ error: 'File download failed' }, { status: 500 })
+  }
+
+  const buffer = Buffer.from(await data.arrayBuffer())
+
+  return new NextResponse(buffer, {
     headers: {
-      'Content-Disposition': `attachment; filename="${submission.originalFileName}"`,
+      'Content-Disposition': `attachment; filename="${row.original_file_name}"`,
       'Content-Type': 'application/octet-stream',
     },
   })

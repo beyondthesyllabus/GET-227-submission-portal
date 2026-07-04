@@ -23,6 +23,7 @@ export default function AdminDashboard({ token, onLogout }) {
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [activeTab, setActiveTab] = useState("submissions"); // 'submissions' | 'students' | 'timeline'
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
 
   const fetchSubmissions = useCallback(async () => {
     setLoading(true);

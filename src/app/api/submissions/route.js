@@ -1,35 +1,9 @@
 import { NextResponse } from 'next/server'
-import { writeFile, readFile, mkdir } from 'fs/promises'
-import { existsSync } from 'fs'
-import path from 'path'
-
-const DB_PATH = path.join(process.cwd(), 'data', 'submissions.json')
-const UPLOADS_PATH = path.join(process.cwd(), 'uploads')
-
-async function ensureDirs() {
-  const dataDir = path.join(process.cwd(), 'data')
-  if (!existsSync(dataDir)) await mkdir(dataDir, { recursive: true })
-  if (!existsSync(UPLOADS_PATH)) await mkdir(UPLOADS_PATH, { recursive: true })
-}
-
-async function readDB() {
-  try {
-    const content = await readFile(DB_PATH, 'utf-8')
-    return JSON.parse(content)
-  } catch {
-    return []
-  }
-}
-
-async function writeDB(data) {
-  await writeFile(DB_PATH, JSON.stringify(data, null, 2), 'utf-8')
-}
+import { supabase, BUCKET } from '../../../lib/supabase'
 
 // POST /api/submissions — Save a new submission
 export async function POST(request) {
   try {
-    await ensureDirs()
-
     const formData = await request.formData()
 
     const groupName    = formData.get('groupName')
@@ -49,57 +23,87 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Save uploaded file
+    // Check for duplicate registration numbers
+    const nonEmptyMembers = members.filter(r => r.trim())
+    if (nonEmptyMembers.length > 0) {
+      const { data: existingRows, error: checkErr } = await supabase
+        .from('submissions')
+        .select('members')
+
+      if (checkErr) {
+        console.error('DB check error:', checkErr)
+        return NextResponse.json({ error: 'Database error' }, { status: 500 })
+      }
+
+      const existingRegs = new Set()
+      ;(existingRows || []).forEach(entry => {
+        ;(entry.members || []).forEach(reg => {
+          if (reg) existingRegs.add(reg.trim().toLowerCase())
+        })
+      })
+
+      const duplicateRegs = members.filter(reg => {
+        const trimmed = reg.trim().toLowerCase()
+        return trimmed && existingRegs.has(trimmed)
+      })
+
+      if (duplicateRegs.length > 0) {
+        return NextResponse.json(
+          { error: `Registration number(s) already submitted: ${duplicateRegs.join(', ')}` },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Upload file to Supabase Storage
     let savedFileName = null
+    let originalFileName = null
     if (file && file.size > 0) {
-  const MAX_SIZE = 500 * 1024 * 1024; // 500 MB limit
-  if (file.size > MAX_SIZE) {
-    return NextResponse.json({ error: 'Folder exceeds 500 MB limit.' }, { status: 413 });
-  }
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-  const safeFileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-  const filePath = path.join(UPLOADS_PATH, safeFileName);
-  await writeFile(filePath, buffer);
-  savedFileName = safeFileName;
-}
+      const MAX_SIZE = 500 * 1024 * 1024 // 500 MB limit
+      if (file.size > MAX_SIZE) {
+        return NextResponse.json({ error: 'Folder exceeds 500 MB limit.' }, { status: 413 })
+      }
+
+      const safeFileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      const bytes = await file.arrayBuffer()
+      const buffer = Buffer.from(bytes)
+
+      const { error: uploadErr } = await supabase.storage
+        .from(BUCKET)
+        .upload(safeFileName, buffer, {
+          contentType: file.type || 'application/octet-stream',
+          upsert: false,
+        })
+
+      if (uploadErr) {
+        console.error('Upload error:', uploadErr)
+        return NextResponse.json({ error: 'File upload failed' }, { status: 500 })
+      }
+
+      savedFileName = safeFileName
+      originalFileName = file.name
+    }
 
     // Generate unique reference code
     const referenceCode = `GET2227-${Math.random().toString(36).substring(2, 10).toUpperCase()}`
 
-    const submission = {
+    // Insert into Supabase
+    const { error: insertErr } = await supabase.from('submissions').insert({
       id: referenceCode,
-      referenceCode,
-      groupName,
+      reference_code: referenceCode,
+      group_name: groupName,
       department,
       level,
-      projectTitle,
+      project_title: projectTitle,
       members,
-      fileName: savedFileName,
-      originalFileName: file?.name || null,
-      submittedAt: new Date().toISOString(),
-    }
+      file_name: savedFileName,
+      original_file_name: originalFileName,
+    })
 
-    // Append to database with duplicate check
-    const db = await readDB()
-    // Gather all existing registration numbers
-    const existingRegs = new Set()
-    db.forEach(entry => {
-      ;(entry.members || []).forEach(reg => {
-        if (reg) existingRegs.add(reg.trim().toLowerCase())
-      })
-    })
-    // Check new members against existing set
-    const duplicateRegs = members.filter(reg => {
-      const trimmed = reg.trim().toLowerCase()
-      return trimmed && existingRegs.has(trimmed)
-    })
-    if (duplicateRegs.length > 0) {
-      return NextResponse.json({ error: `Registration number(s) already submitted: ${duplicateRegs.join(', ')}` }, { status: 400 })
+    if (insertErr) {
+      console.error('Insert error:', insertErr)
+      return NextResponse.json({ error: 'Failed to save submission' }, { status: 500 })
     }
-    // Append to database
-    db.push(submission)
-    await writeDB(db)
 
     return NextResponse.json({ referenceCode }, { status: 201 })
   } catch (error) {
@@ -115,7 +119,29 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  await ensureDirs()
-  const db = await readDB()
-  return NextResponse.json(db)
+  const { data, error } = await supabase
+    .from('submissions')
+    .select('*')
+    .order('submitted_at', { ascending: false })
+
+  if (error) {
+    console.error('Fetch error:', error)
+    return NextResponse.json({ error: 'Failed to fetch submissions' }, { status: 500 })
+  }
+
+  // Map snake_case DB columns back to camelCase for the frontend
+  const mapped = (data || []).map(row => ({
+    id: row.id,
+    referenceCode: row.reference_code,
+    groupName: row.group_name,
+    department: row.department,
+    level: row.level,
+    projectTitle: row.project_title,
+    members: row.members || [],
+    fileName: row.file_name,
+    originalFileName: row.original_file_name,
+    submittedAt: row.submitted_at,
+  }))
+
+  return NextResponse.json(mapped)
 }
